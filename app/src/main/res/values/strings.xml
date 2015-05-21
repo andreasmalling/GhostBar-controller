@@ -2,5 +2,8 @@
     <string name="app_name">GhostBar-controller</string>
 
     <string name="hello_world">Hello world!</string>
-    <string name="action_settings">Settings</string>
+    <string name="action_beacon">Toggle Beacon</string>
+    <string name="beacon_id1">2f231151-cf6d-1a0f-adf2-f1911ba9ffa6</string>
+    <string name="beacon_id2">1</string>
+    <string name="beacon_id3">1</string>
 </resources>
