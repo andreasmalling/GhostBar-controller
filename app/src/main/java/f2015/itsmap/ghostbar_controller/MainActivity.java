@@ -49,7 +49,7 @@ public class MainActivity extends Activity {
         );
 
         // Pin screen
-        startLockTask();
+        // TODO: startLockTask();
 
         // Beacon
         int beaconSupport = BeaconTransmitter.checkTransmissionSupported(getApplicationContext());
@@ -131,11 +131,27 @@ public class MainActivity extends Activity {
         // Read some data! Most have just one port (port 0).
         UsbSerialPort port = driver.getPorts().get(0);
         port.open(connection);
-        port.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
+        port.setParameters(57600, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
         try {
-            byte buffer[] = new byte[16];
-            int numBytesRead = port.read(buffer, 1000);
+            String request = "D100\r\n";
+
+            port.write(request.getBytes(),6);
+            byte buffer[] = new byte[32];
+
+
+            int numBytesRead = 0;
+            String message = "";
+            while( numBytesRead < 15 ) {
+                numBytesRead += port.read(buffer, 1000);
+                message += new String(buffer);
+                Arrays.fill( buffer, (byte) 0 );
+            }
+
+            Toast.makeText(getApplicationContext(),"Read " + numBytesRead + " bytes.", Toast.LENGTH_SHORT ).show();
+            Toast.makeText(getApplicationContext(),"Read " + message, Toast.LENGTH_SHORT ).show();
+
             Log.d(TAG, "Read " + numBytesRead + " bytes.");
+            Log.d(TAG, "Message:" + message);
         } catch (IOException e) {
             e.printStackTrace();
         } finally {
