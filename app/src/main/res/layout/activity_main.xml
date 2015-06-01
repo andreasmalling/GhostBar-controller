@@ -9,6 +9,16 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="@string/switch_beacon"
-        android:id="@+id/switch_beacon" />
+        android:id="@+id/switch_beacon"
+        android:layout_above="@+id/read_usb"
+        android:layout_centerHorizontal="true" />
+
+    <Button
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Read USB"
+        android:id="@+id/read_usb"
+        android:layout_centerVertical="true"
+        android:layout_centerHorizontal="true" />
 
 </RelativeLayout>

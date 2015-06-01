@@ -1,14 +1,14 @@
 package f2015.itsmap.ghostbar_controller;
 
 import android.app.Activity;
+import android.bluetooth.BluetoothAdapter;
 import android.content.Context;
 import android.hardware.usb.UsbDeviceConnection;
 import android.hardware.usb.UsbManager;
 import android.os.Bundle;
 import android.util.Log;
-import android.view.Menu;
-import android.view.MenuItem;
 import android.view.View;
+import android.widget.Button;
 import android.widget.Switch;
 import android.widget.Toast;
 
@@ -74,26 +74,45 @@ public class MainActivity extends Activity {
         toggle.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                toggleTransmit();
+                ((Switch) v).setChecked(toggleTransmit());
+            }
+        });
+
+        Button readUSB = (Button) findViewById(R.id.read_usb);
+        readUSB.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                try {
+                    readUSB();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
             }
         });
 
     }
 
-    private void toggleTransmit() {
+    private boolean toggleTransmit() {
         if(transmitting) {
             beaconTransmitter.stopAdvertising();
             transmitting = false;
             Toast.makeText(getApplicationContext(), "Beacon transmission stopped", Toast.LENGTH_SHORT).show();
+            return transmitting;
         } else {
-            // TODO: check if bluetooth is enabled
-            beaconTransmitter.startAdvertising(beacon);
-            transmitting = true;
-            Toast.makeText(getApplicationContext(), "Beacon transmission started", Toast.LENGTH_SHORT).show();
+
+            // check if bluetooth is enabled, and turn on if not
+            BluetoothAdapter mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+            if (mBluetoothAdapter.isEnabled()){
+                beaconTransmitter.startAdvertising(beacon);
+                transmitting = true;
+                Toast.makeText(getApplicationContext(), "Beacon transmission started", Toast.LENGTH_SHORT).show();
+            } else
+                Toast.makeText(getApplicationContext(), "Please turn on bluetooth", Toast.LENGTH_LONG).show();
+            return transmitting;
         }
     }
 
-    private void findUSB () throws IOException {
+    private void readUSB () throws IOException {
         // Find all available drivers from attached devices.
         UsbManager manager = (UsbManager) getSystemService(Context.USB_SERVICE);
         List<UsbSerialDriver> availableDrivers = UsbSerialProber.getDefaultProber().findAllDrivers(manager);
@@ -109,18 +128,18 @@ public class MainActivity extends Activity {
             return;
         }
 
-        /*// Read some data! Most have just one port (port 0).
-        UsbSerialPort port = driver.getPort(0);
+        // Read some data! Most have just one port (port 0).
+        UsbSerialPort port = driver.getPorts().get(0);
         port.open(connection);
+        port.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
         try {
-            port.setBaudRate(115200);
             byte buffer[] = new byte[16];
             int numBytesRead = port.read(buffer, 1000);
             Log.d(TAG, "Read " + numBytesRead + " bytes.");
         } catch (IOException e) {
-            // Deal with error.
+            e.printStackTrace();
         } finally {
             port.close();
-        }*/
+        }
     }
 }

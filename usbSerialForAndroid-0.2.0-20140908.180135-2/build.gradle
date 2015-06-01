@@ -1,0 +1,2 @@
+configurations.create("default")
+artifacts.add("default", file('usbSerialForAndroid-0.2.0-20140908.180135-2.aar'))
