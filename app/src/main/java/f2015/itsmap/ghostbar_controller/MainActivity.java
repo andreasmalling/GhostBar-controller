@@ -31,6 +31,10 @@ public class MainActivity extends Activity {
     private Beacon beacon;
     private BeaconTransmitter beaconTransmitter;
 
+    private int MAX_WEIGHT = 999;
+    private int MIN_WEIGHT = 100;
+
+
     private boolean transmitting = false;
 
     @Override
@@ -83,7 +87,7 @@ public class MainActivity extends Activity {
             @Override
             public void onClick(View v) {
                 try {
-                    readUSB();
+                    pourBeer(100);
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
@@ -112,50 +116,67 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void readUSB () throws IOException {
+    private int pourBeer(int mg) throws IOException {
+
+        int responseCode = 0;
+
+        // Check for valid weight request
+        if(mg < MIN_WEIGHT || mg > MAX_WEIGHT)
+            return responseCode;
+
         // Find all available drivers from attached devices.
         UsbManager manager = (UsbManager) getSystemService(Context.USB_SERVICE);
         List<UsbSerialDriver> availableDrivers = UsbSerialProber.getDefaultProber().findAllDrivers(manager);
-        if (availableDrivers.isEmpty()) {
-            return;
-        }
+        if (availableDrivers.isEmpty())
+            return responseCode;
 
         // Open a connection to the first available driver.
         UsbSerialDriver driver = availableDrivers.get(0);
         UsbDeviceConnection connection = manager.openDevice(driver.getDevice());
-        if (connection == null) {
-            // You probably need to call UsbManager.requestPermission(driver.getDevice(), ..)
-            return;
-        }
+        if (connection == null)
+            return responseCode;
 
-        // Read some data! Most have just one port (port 0).
+        // Open connection
         UsbSerialPort port = driver.getPorts().get(0);
         port.open(connection);
         port.setParameters(57600, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
+
+        // Send request
         try {
-            String request = "D100\r\n";
+            String request = "D"+mg+"\r\n";
 
             port.write(request.getBytes(),6);
             byte buffer[] = new byte[32];
-
 
             int numBytesRead = 0;
             String message = "";
             while( numBytesRead < 15 ) {
                 numBytesRead += port.read(buffer, 1000);
                 message += new String(buffer);
-                Arrays.fill( buffer, (byte) 0 );
+
+                // Clear buffer
+               Arrays.fill( buffer, (byte) 0 );
             }
-
-            Toast.makeText(getApplicationContext(),"Read " + numBytesRead + " bytes.", Toast.LENGTH_SHORT ).show();
-            Toast.makeText(getApplicationContext(),"Read " + message, Toast.LENGTH_SHORT ).show();
-
             Log.d(TAG, "Read " + numBytesRead + " bytes.");
             Log.d(TAG, "Message:" + message);
+
+/* FIXME: Doesn't work, due to noise on response
+            // Extract response
+            if(message.contains("No flow"))
+                return responseCode = -1;
+
+            int responseBegin = message.indexOf("d");
+            String response = message.substring(responseBegin,responseBegin+4);
+            Log.d(TAG, "Response:" + response);
+
+            responseCode = Integer.parseInt(response.substring(1));
+            Log.d(TAG, "Responsecode:" + responseCode);
+*/
         } catch (IOException e) {
             e.printStackTrace();
         } finally {
             port.close();
         }
+        return responseCode;
     }
 }
