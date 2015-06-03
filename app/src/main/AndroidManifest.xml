@@ -18,10 +18,22 @@
             <intent-filter>
                 <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
             </intent-filter>
+
+            <intent-filter>
+                <action android:name="ItogDataService.RESULT_BEER_SERVICE_NEW_ORDER"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="ItogDataService.RESULT_BEER_SERVICE_SET_ORDER_SUCCESS"/>
+            </intent-filter>
+            <action android:name="ItogDataService.ERROR_CALL_SERVICE"/>
+
             <meta-data
                 android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
                 android:resource="@xml/device_filter" />
         </activity>
+        <service android:name=".BeerServerService" />
     </application>
+
+    <uses-permission android:name="android.permission.INTERNET" />
 
 </manifest>

@@ -2,15 +2,20 @@ package f2015.itsmap.ghostbar_controller;
 
 import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
+import android.content.BroadcastReceiver;
+import android.content.ComponentName;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.ServiceConnection;
 import android.hardware.usb.UsbDeviceConnection;
 import android.hardware.usb.UsbManager;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.IBinder;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
-import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -29,7 +34,7 @@ import java.util.List;
 
 public class MainActivity extends Activity {
 
-    private static final String TAG = "MainActivity";
+    private static final String TAG = "Controller MainActivity";
     private Beacon beacon;
     private BeaconTransmitter beaconTransmitter;
 
@@ -40,10 +45,41 @@ public class MainActivity extends Activity {
     private boolean transmitting = false;
     private boolean askForLock;
 
+    private boolean mBound = false;
+    private BeerServerService beerServerServiceRef;
+    private BeerBroadcastReceiver beerBroadcastReceiver;
+
+    private ServerCommunication server;
+
+    /** Defines callbacks for service binding, passed to bindService() */
+    /**  */
+    private ServiceConnection mConnection = new ServiceConnection() {
+
+        @Override
+        public void onServiceConnected(ComponentName className, IBinder service) {
+            // We've bound to LocalService, cast the IBinder and get
+            // LocalService instance
+            beerServerServiceRef = ((BeerServerService.ItogBinder) service)
+                    .getService();
+            mBound = true;
+            //Make first update
+            beerServerServiceRef.checkForNewOrder();
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName arg0) {
+            beerServerServiceRef = null;
+            mBound = false;
+        }
+
+    };
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        //setBeaconTransmission(true);
 
         // Full screen
         getWindow().getDecorView().setSystemUiVisibility(
@@ -78,8 +114,7 @@ public class MainActivity extends Activity {
         readUSB.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                setBeerID("42");
-                pourBeer(100);
+                pourBeer((int) beerServerServiceRef.GetBeerAmount());
             }
         });
 
@@ -87,12 +122,56 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onResume() {
+        Log.d(TAG, "onResume");
+
         super.onResume();
         // Ensure re-activation when leaving app
-        startLockTask();
+        //startLockTask(); TODO
+
+        IntentFilter filter;
+        filter = new IntentFilter(BeerServerService.RESULT_BEER_SERVICE_NEW_ORDER);
+        filter.addAction(BeerServerService.RESULT_BEER_SERVICE_SET_ORDER_SUCCESS);
+        filter.addAction(BeerServerService.ERROR_CALL_SERVICE);
+        beerBroadcastReceiver = new BeerBroadcastReceiver();
+        registerReceiver(beerBroadcastReceiver, filter);
+
+        if(server == null) {
+            server = new ServerCommunication();
+            server.execute();
+        }
     }
 
-    private boolean setBeaconTransmitting(boolean broadcast) {
+    @Override
+    public void onPause() {
+        Log.d(TAG, "onPause");
+        super.onPause();
+
+        unregisterReceiver(beerBroadcastReceiver);
+    }
+
+    @Override
+    protected void onStart() {
+        Log.d(TAG, "onStart");
+        super.onStart();
+        
+        // Bind to LocalService
+        Intent intent = new Intent(this, BeerServerService.class);
+        bindService(intent, mConnection, Context.BIND_AUTO_CREATE);
+    }
+
+    @Override
+    protected void onStop() {
+        Log.d(TAG, "onStop");
+        super.onStop();
+        
+        // Unbind from the service
+        if (mBound) {
+            unbindService(mConnection);
+            mBound = false;
+        }
+    }
+
+    private boolean setBeaconTransmission(boolean broadcast) {
         if(!broadcast) {
             beaconTransmitter.stopAdvertising();
             Toast.makeText(getApplicationContext(), "Beacon transmission stopped", Toast.LENGTH_SHORT).show();
@@ -103,10 +182,15 @@ public class MainActivity extends Activity {
             BluetoothAdapter mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
             if (mBluetoothAdapter.isEnabled()){
                 beaconTransmitter.startAdvertising(beacon);
-                Toast.makeText(getApplicationContext(), "Beacon transmission started", Toast.LENGTH_SHORT).show();
+
+                String message = "Beacon transmission started";
+                Log.d(TAG, message);
+                Toast.makeText(getApplicationContext(), message, Toast.LENGTH_SHORT).show();
                 return broadcast;
             } else {
-                Toast.makeText(getApplicationContext(), "Please turn on bluetooth", Toast.LENGTH_LONG).show();
+                String message = "Please turn on bluetooth";
+                Log.d(TAG, message);
+                Toast.makeText(getApplicationContext(), message, Toast.LENGTH_SHORT).show();
                 return false;
             }
         }
@@ -190,6 +274,81 @@ public class MainActivity extends Activity {
                 }
             }
             return responseCode;
+        }
+    }
+
+    //- Called when new order details are ready
+    private void newBeerOrderReady() {
+        if (this.beerServerServiceRef != null) {
+            setBeerID(String.valueOf(beerServerServiceRef.GetBeerOrderId()));
+
+            String result = "BeerPrice: "+String.valueOf(beerServerServiceRef.GetBeerPrice())
+                    + "\r\nBeerAmount: " + String.valueOf(beerServerServiceRef.GetBeerAmount()) +
+                    "\nTransactionId: " + String.valueOf(beerServerServiceRef.GetBeerTransactionId()) +
+                    "\nOrderId: " + String.valueOf(beerServerServiceRef.GetBeerOrderId())+
+                    "\nOrdered time: " + String.valueOf(beerServerServiceRef.GetBeerOrderCreated());
+
+            Log.d(TAG, "newBeerOrderReady: " + result);
+
+            Toast toast = Toast.makeText(getApplicationContext(), result, Toast.LENGTH_SHORT);
+            //toast.show();
+        }
+    }
+
+    private void beerOrderUpdatedResult(){
+        if (this.beerServerServiceRef != null) {
+
+            String result = "Result: "+String.valueOf(beerServerServiceRef.GetBeerSetOrderResult())
+                    + "\r\nTime: " + String.valueOf(beerServerServiceRef.GetBeerSetOrderDate());
+
+            Log.d(TAG, "beerOrderUpdatedResult: " + result);
+            Toast toast = Toast.makeText(getApplicationContext(),result, Toast.LENGTH_SHORT);
+            toast.show();
+        }
+    }
+
+    private class BeerBroadcastReceiver extends BroadcastReceiver {
+        /* the onReceive method will be run in the UI thread
+        * it is put into the event queue like a user event
+        * */
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (intent.getAction().compareTo(
+                    BeerServerService.RESULT_BEER_SERVICE_NEW_ORDER) == 0) {
+
+                //- Ready for new pour
+                newBeerOrderReady();
+
+            }
+            else if (intent.getAction().compareTo(
+                    BeerServerService.RESULT_BEER_SERVICE_SET_ORDER_SUCCESS) == 0) {
+
+                //- Result of updating pour
+                beerOrderUpdatedResult();
+            }
+
+            else {
+                Log.d(TAG, "Host unavailable");
+                CharSequence text = "Host ikke tilgængelig";
+                int duration = Toast.LENGTH_LONG;
+                Toast.makeText(context, text, duration).show();
+            }
+        }
+    };
+    
+    private class ServerCommunication extends AsyncTask<Void,Void,Void> {
+
+        @Override
+        protected Void doInBackground(Void... params) {
+            while(true){
+                if (mBound) // Service may still not be bound
+                    beerServerServiceRef.checkForNewOrder();
+                try {
+                    Thread.sleep(5000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
         }
     }
 }
