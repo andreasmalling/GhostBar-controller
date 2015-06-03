@@ -1,4 +1,8 @@
 <resources>
     <string name="app_name">GhostBar-controller</string>
     <string name="switch_beacon">Toggle Beacon</string>
+    <string name="beer_id">No current servings</string>
+    <string name="beer_serving">Now serving beer number:</string>
+    <string name="button_confirm">Pour Beer</string>
+    <string name="remember_glass">Remember to place your glass before pouring</string>
 </resources>

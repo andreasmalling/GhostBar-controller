@@ -5,20 +5,41 @@
     android:paddingTop="@dimen/activity_vertical_margin"
     android:paddingBottom="@dimen/activity_vertical_margin" tools:context=".MainActivity">
 
-    <Switch
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/switch_beacon"
-        android:id="@+id/switch_beacon"
-        android:layout_above="@+id/read_usb"
-        android:layout_centerHorizontal="true" />
+    <TextView
+        style="@style/BeerIDFont"
+        android:text="@string/beer_serving"
+        android:id="@+id/beer_serving"
+        android:layout_marginTop="64dp" />
+
+    <TextView
+        style="@style/BeerIDFont"
+        android:textStyle="bold"
+        android:text="@string/beer_id"
+        android:id="@+id/beer_id"
+        android:textSize="80dp"
+        android:layout_below="@+id/beer_serving"
+        android:layout_alignParentStart="true"
+        android:layout_marginTop="96dp" />
 
     <Button
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Read USB"
-        android:id="@+id/read_usb"
-        android:layout_centerVertical="true"
+        android:text="@string/button_confirm"
+        android:id="@+id/button_confirm"
+        android:layout_marginBottom="72dp"
+        android:textSize="48dp"
+        android:layout_alignParentBottom="true"
         android:layout_centerHorizontal="true" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textAppearance="?android:attr/textAppearanceLarge"
+        android:text="@string/remember_glass"
+        android:id="@+id/remember_glass"
+        android:layout_above="@+id/button_confirm"
+        android:layout_centerHorizontal="true"
+        android:layout_marginBottom="16dp" />
+
 
 </RelativeLayout>

@@ -1,8 +1,16 @@
 <resources>
 
     <!-- Base application theme. -->
-    <style name="AppTheme" parent="android:Theme.Holo.Light.DarkActionBar">
-        <!-- Customize your theme here. -->
+    <style name="BeerTheme" parent="android:Theme.Holo.Light.DarkActionBar">
+        <item name="android:background">@color/beer_light</item>
+    </style>
+
+    <style name="BeerIDFont" parent="@android:style/TextAppearance.Large">
+        <item name="android:layout_width">fill_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_alignParentTop">true</item>
+        <item name="android:gravity">center</item>
+        <item name="android:typeface">monospace</item>
     </style>
 
 </resources>

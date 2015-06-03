@@ -5,11 +5,13 @@ import android.bluetooth.BluetoothAdapter;
 import android.content.Context;
 import android.hardware.usb.UsbDeviceConnection;
 import android.hardware.usb.UsbManager;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.Switch;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.hoho.android.usbserial.driver.UsbSerialDriver;
@@ -36,6 +38,7 @@ public class MainActivity extends Activity {
 
 
     private boolean transmitting = false;
+    private boolean askForLock;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -49,11 +52,8 @@ public class MainActivity extends Activity {
                         | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
                         | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION // hide nav bar
                         | View.SYSTEM_UI_FLAG_FULLSCREEN // hide status bar
-                        | View.SYSTEM_UI_FLAG_IMMERSIVE
+                        | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
         );
-
-        // Pin screen
-        // TODO: startLockTask();
 
         // Beacon
         int beaconSupport = BeaconTransmitter.checkTransmissionSupported(getApplicationContext());
@@ -74,109 +74,122 @@ public class MainActivity extends Activity {
             beaconTransmitter = new BeaconTransmitter(getApplicationContext(), beaconParser);
         }
 
-        Switch toggle = (Switch) findViewById(R.id.switch_beacon);
-        toggle.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                ((Switch) v).setChecked(toggleTransmit());
-            }
-        });
-
-        Button readUSB = (Button) findViewById(R.id.read_usb);
+        Button readUSB = (Button) findViewById(R.id.button_confirm);
         readUSB.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                try {
-                    pourBeer(100);
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+                setBeerID("42");
+                pourBeer(100);
             }
         });
 
     }
 
-    private boolean toggleTransmit() {
-        if(transmitting) {
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Ensure re-activation when leaving app
+        startLockTask();
+    }
+
+    private boolean setBeaconTransmitting(boolean broadcast) {
+        if(!broadcast) {
             beaconTransmitter.stopAdvertising();
-            transmitting = false;
             Toast.makeText(getApplicationContext(), "Beacon transmission stopped", Toast.LENGTH_SHORT).show();
-            return transmitting;
+            return broadcast;
         } else {
 
             // check if bluetooth is enabled, and turn on if not
             BluetoothAdapter mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
             if (mBluetoothAdapter.isEnabled()){
                 beaconTransmitter.startAdvertising(beacon);
-                transmitting = true;
                 Toast.makeText(getApplicationContext(), "Beacon transmission started", Toast.LENGTH_SHORT).show();
-            } else
+                return broadcast;
+            } else {
                 Toast.makeText(getApplicationContext(), "Please turn on bluetooth", Toast.LENGTH_LONG).show();
-            return transmitting;
+                return false;
+            }
         }
     }
 
-    private int pourBeer(int mg) throws IOException {
+    public int pourBeer(int mg) {
+        new serialCommunication().execute(mg);
+        return mg;  //FIXME: Hardcoded return, due to noise on response from Arduino.
+    }
 
-        int responseCode = 0;
+    public void setBeerID(String id) {
+        TextView beerID = (TextView) findViewById(R.id.beer_id);
+        beerID.setText(id);
+    }
 
-        // Check for valid weight request
-        if(mg < MIN_WEIGHT || mg > MAX_WEIGHT)
-            return responseCode;
+    private class serialCommunication extends AsyncTask<Integer, Void, Integer> {
+        @Override
+        protected Integer doInBackground(Integer... params) {
+            int responseCode = 0;
+            int mg = params[0];
 
-        // Find all available drivers from attached devices.
-        UsbManager manager = (UsbManager) getSystemService(Context.USB_SERVICE);
-        List<UsbSerialDriver> availableDrivers = UsbSerialProber.getDefaultProber().findAllDrivers(manager);
-        if (availableDrivers.isEmpty())
-            return responseCode;
+            // Check for valid weight request
+            if(mg < MIN_WEIGHT || mg > MAX_WEIGHT)
+                return responseCode;
 
-        // Open a connection to the first available driver.
-        UsbSerialDriver driver = availableDrivers.get(0);
-        UsbDeviceConnection connection = manager.openDevice(driver.getDevice());
-        if (connection == null)
-            return responseCode;
+            // Find all available drivers from attached devices.
+            UsbManager manager = (UsbManager) getSystemService(Context.USB_SERVICE);
+            List<UsbSerialDriver> availableDrivers = UsbSerialProber.getDefaultProber().findAllDrivers(manager);
+            if (availableDrivers.isEmpty())
+                return responseCode;
 
-        // Open connection
-        UsbSerialPort port = driver.getPorts().get(0);
-        port.open(connection);
-        port.setParameters(57600, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
+            // Open a connection to the first available driver.
+            UsbSerialDriver driver = availableDrivers.get(0);
+            UsbDeviceConnection connection = manager.openDevice(driver.getDevice());
+            if (connection == null)
+                return responseCode;
 
-        // Send request
-        try {
-            String request = "D"+mg+"\r\n";
+            // Open connection
+            UsbSerialPort port = driver.getPorts().get(0);
+            try {
+                port.open(connection);
+                port.setParameters(57600, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
 
-            port.write(request.getBytes(),6);
-            byte buffer[] = new byte[32];
+            // Send request
+                String request = "D"+mg+"\r\n";
 
-            int numBytesRead = 0;
-            String message = "";
-            while( numBytesRead < 15 ) {
-                numBytesRead += port.read(buffer, 1000);
-                message += new String(buffer);
+                port.write(request.getBytes(),6);
+                byte buffer[] = new byte[32];
 
-                // Clear buffer
-               Arrays.fill( buffer, (byte) 0 );
+                int numBytesRead = 0;
+                String message = "";
+                while( numBytesRead < 15 ) {
+                    numBytesRead += port.read(buffer, 1000);
+                    message += new String(buffer);
+
+                    // Clear buffer
+                    Arrays.fill( buffer, (byte) 0 );
+                }
+                Log.d(TAG, "Read " + numBytesRead + " bytes.");
+                Log.d(TAG, "Message:" + message);
+
+                /* FIXME: Doesn't work, due to noise on response
+                // Extract response
+                if(message.contains("No flow"))
+                    return responseCode = -1;
+
+                int responseBegin = message.indexOf("d");
+                String response = message.substring(responseBegin,responseBegin+4);
+                Log.d(TAG, "Response:" + response);
+
+                responseCode = Integer.parseInt(response.substring(1));
+                Log.d(TAG, "Responsecode:" + responseCode);
+                */
+            } catch (IOException e) {
+                e.printStackTrace();
+            } finally {
+                try {
+                    port.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
             }
-            Log.d(TAG, "Read " + numBytesRead + " bytes.");
-            Log.d(TAG, "Message:" + message);
-
-/* FIXME: Doesn't work, due to noise on response
-            // Extract response
-            if(message.contains("No flow"))
-                return responseCode = -1;
-
-            int responseBegin = message.indexOf("d");
-            String response = message.substring(responseBegin,responseBegin+4);
-            Log.d(TAG, "Response:" + response);
-
-            responseCode = Integer.parseInt(response.substring(1));
-            Log.d(TAG, "Responsecode:" + responseCode);
-*/
-        } catch (IOException e) {
-            e.printStackTrace();
-        } finally {
-            port.close();
+            return responseCode;
         }
-        return responseCode;
     }
 }
