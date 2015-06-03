@@ -218,6 +218,8 @@ public class BeerServerService extends Service {
 			return;
 		}
 
+        BeerOrderId = 0;
+
 		HttpEntity httpEntity = webServerResponse.getEntity();
 
 		if (httpEntity != null) {
@@ -231,7 +233,14 @@ public class BeerServerService extends Service {
 				while ((line = in.readLine()) != null) {
 					SB.append(line);
 				}
-				
+
+				Intent retint = new Intent(RESULT_BEER_SERVICE_NEW_ORDER);
+
+                if (SB.toString().equals("0")) {
+                    sendBroadcast(retint);
+                    return;
+                }
+
 				JSONArray ja = new JSONArray(SB.toString());
 
 				if(ja.length() >0 ) {
@@ -243,7 +252,6 @@ public class BeerServerService extends Service {
 					BeerAmount = jo.getDouble("amount");
 					BeerOrderCreated = jo.getString("created");
 
-					Intent retint = new Intent(RESULT_BEER_SERVICE_NEW_ORDER);
 					sendBroadcast(retint);
 				}
 			} catch (IOException e) {
@@ -252,9 +260,12 @@ public class BeerServerService extends Service {
 				return;
 			} catch (JSONException e) {
 				// TODO Auto-generated catch block
-				broadCastError(e);
+				//broadCastError(e);
+                BeerOrderId = 0;
 				return;
-			}
+			} catch (ClassCastException e){
+                broadCastError(e);
+            }
 
 		}
 	}

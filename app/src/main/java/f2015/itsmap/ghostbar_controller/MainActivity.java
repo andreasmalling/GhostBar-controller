@@ -49,7 +49,7 @@ public class MainActivity extends Activity {
     private BeerServerService beerServerServiceRef;
     private BeerBroadcastReceiver beerBroadcastReceiver;
 
-    private ServerCommunication server;
+    private Thread server;
 
     /** Defines callbacks for service binding, passed to bindService() */
     /**  */
@@ -73,13 +73,14 @@ public class MainActivity extends Activity {
         }
 
     };
+    private Button confirmButton;
+    private int currentID;
+    private boolean setOrder;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-
-        //setBeaconTransmission(true);
 
         // Full screen
         getWindow().getDecorView().setSystemUiVisibility(
@@ -110,11 +111,14 @@ public class MainActivity extends Activity {
             beaconTransmitter = new BeaconTransmitter(getApplicationContext(), beaconParser);
         }
 
-        Button readUSB = (Button) findViewById(R.id.button_confirm);
-        readUSB.setOnClickListener(new View.OnClickListener() {
+        confirmButton = (Button) findViewById(R.id.button_confirm);
+        confirmButton.setEnabled(false);
+        confirmButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                pourBeer((int) beerServerServiceRef.GetBeerAmount());
+                int amount = (int) beerServerServiceRef.GetBeerAmount();
+                Log.d(TAG, "Amount: " + amount + " mg.");
+                pourBeer(amount);
             }
         });
 
@@ -128,6 +132,8 @@ public class MainActivity extends Activity {
         // Ensure re-activation when leaving app
         //startLockTask(); TODO
 
+        setBeaconTransmission(true);
+
         IntentFilter filter;
         filter = new IntentFilter(BeerServerService.RESULT_BEER_SERVICE_NEW_ORDER);
         filter.addAction(BeerServerService.RESULT_BEER_SERVICE_SET_ORDER_SUCCESS);
@@ -136,8 +142,9 @@ public class MainActivity extends Activity {
         registerReceiver(beerBroadcastReceiver, filter);
 
         if(server == null) {
-            server = new ServerCommunication();
-            server.execute();
+            /*server = new ServerCommunication();
+            server.execute();*/
+            serverCommunication();
         }
     }
 
@@ -145,6 +152,8 @@ public class MainActivity extends Activity {
     public void onPause() {
         Log.d(TAG, "onPause");
         super.onPause();
+
+        setBeaconTransmission(false);
 
         unregisterReceiver(beerBroadcastReceiver);
     }
@@ -174,7 +183,8 @@ public class MainActivity extends Activity {
     private boolean setBeaconTransmission(boolean broadcast) {
         if(!broadcast) {
             beaconTransmitter.stopAdvertising();
-            Toast.makeText(getApplicationContext(), "Beacon transmission stopped", Toast.LENGTH_SHORT).show();
+            String message = "Beacon transmission stopped";
+            Log.d(TAG, message);
             return broadcast;
         } else {
 
@@ -185,12 +195,10 @@ public class MainActivity extends Activity {
 
                 String message = "Beacon transmission started";
                 Log.d(TAG, message);
-                Toast.makeText(getApplicationContext(), message, Toast.LENGTH_SHORT).show();
                 return broadcast;
             } else {
                 String message = "Please turn on bluetooth";
                 Log.d(TAG, message);
-                Toast.makeText(getApplicationContext(), message, Toast.LENGTH_SHORT).show();
                 return false;
             }
         }
@@ -203,7 +211,15 @@ public class MainActivity extends Activity {
 
     public void setBeerID(String id) {
         TextView beerID = (TextView) findViewById(R.id.beer_id);
-        beerID.setText(id);
+
+        if(id.equals("0")){
+            confirmButton.setEnabled(false);
+            beerID.setText(getResources().getText(R.string.beer_id));
+        } else {
+            currentID = Integer.parseInt(id);
+            confirmButton.setEnabled(true);
+            beerID.setText(id);
+        }
     }
 
     private class serialCommunication extends AsyncTask<Integer, Void, Integer> {
@@ -234,25 +250,35 @@ public class MainActivity extends Activity {
                 port.open(connection);
                 port.setParameters(57600, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
 
-            // Send request
+                // Send request
                 String request = "D"+mg+"\r\n";
 
+                // Serial write
                 port.write(request.getBytes(),6);
                 byte buffer[] = new byte[32];
 
                 int numBytesRead = 0;
                 String message = "";
-                while( numBytesRead < 15 ) {
+
+                // Serial read
+                while( true ) {
                     numBytesRead += port.read(buffer, 1000);
-                    message += new String(buffer);
+
+                    for(int i = 0; i< 30;i++){
+                        if(buffer[i] == 0) break;
+                        message += String.format("%c",buffer[i]);
+                    }
+
+                    if(message.contains("?"))
+                        break;
 
                     // Clear buffer
-                    Arrays.fill( buffer, (byte) 0 );
+                    Arrays.fill(buffer, (byte) 0);
                 }
+
                 Log.d(TAG, "Read " + numBytesRead + " bytes.");
                 Log.d(TAG, "Message:" + message);
 
-                /* FIXME: Doesn't work, due to noise on response
                 // Extract response
                 if(message.contains("No flow"))
                     return responseCode = -1;
@@ -263,7 +289,8 @@ public class MainActivity extends Activity {
 
                 responseCode = Integer.parseInt(response.substring(1));
                 Log.d(TAG, "Responsecode:" + responseCode);
-                */
+
+                setOrder = true;
             } catch (IOException e) {
                 e.printStackTrace();
             } finally {
@@ -335,20 +362,28 @@ public class MainActivity extends Activity {
             }
         }
     };
-    
-    private class ServerCommunication extends AsyncTask<Void,Void,Void> {
 
-        @Override
-        protected Void doInBackground(Void... params) {
-            while(true){
-                if (mBound) // Service may still not be bound
-                    beerServerServiceRef.checkForNewOrder();
-                try {
-                    Thread.sleep(5000);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
+    public void serverCommunication(){
+        server = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                while(true){
+
+                    if (mBound) {// Service may still not be bound
+                        if(setOrder) {
+                            beerServerServiceRef.setOrderComplete(currentID);
+                            setOrder = false;
+                        }
+                        beerServerServiceRef.checkForNewOrder();
+                    }
+                    try {
+                        Thread.sleep(5000);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
                 }
             }
-        }
+        });
+        server.start();
     }
 }
