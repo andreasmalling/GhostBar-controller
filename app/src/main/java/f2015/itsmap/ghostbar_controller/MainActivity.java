@@ -76,6 +76,8 @@ public class MainActivity extends Activity {
     private Button confirmButton;
     private int currentID;
     private boolean setOrder;
+    private String currentBeerID;
+    private boolean servingBeer = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -116,9 +118,11 @@ public class MainActivity extends Activity {
         confirmButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                servingBeer = true;
+                confirmButton.setEnabled(false);
                 int amount = (int) beerServerServiceRef.GetBeerAmount();
                 Log.d(TAG, "Amount: " + amount + " mg.");
-                pourBeer(amount);
+                pourBeer(amount*10);
             }
         });
 
@@ -162,7 +166,7 @@ public class MainActivity extends Activity {
     protected void onStart() {
         Log.d(TAG, "onStart");
         super.onStart();
-        
+
         // Bind to LocalService
         Intent intent = new Intent(this, BeerServerService.class);
         bindService(intent, mConnection, Context.BIND_AUTO_CREATE);
@@ -172,7 +176,7 @@ public class MainActivity extends Activity {
     protected void onStop() {
         Log.d(TAG, "onStop");
         super.onStop();
-        
+
         // Unbind from the service
         if (mBound) {
             unbindService(mConnection);
@@ -212,14 +216,17 @@ public class MainActivity extends Activity {
     public void setBeerID(String id) {
         TextView beerID = (TextView) findViewById(R.id.beer_id);
 
-        if(id.equals("0")){
+        if(id.equals("0") ){
             confirmButton.setEnabled(false);
             beerID.setText(getResources().getText(R.string.beer_id));
+        } else if (id.equals(currentBeerID) && servingBeer ) {
+            confirmButton.setEnabled(false);
         } else {
             currentID = Integer.parseInt(id);
             confirmButton.setEnabled(true);
             beerID.setText(id);
         }
+        currentBeerID = id;
     }
 
     private class serialCommunication extends AsyncTask<Integer, Void, Integer> {
@@ -228,21 +235,28 @@ public class MainActivity extends Activity {
             int responseCode = 0;
             int mg = params[0];
 
+            Log.d(TAG, "Tag 1");
             // Check for valid weight request
-            if(mg < MIN_WEIGHT || mg > MAX_WEIGHT)
+            if(mg < MIN_WEIGHT || mg > MAX_WEIGHT) {
+                setOrder = true;
                 return responseCode;
+            }
 
+            Log.d(TAG, "Tag 2");
             // Find all available drivers from attached devices.
             UsbManager manager = (UsbManager) getSystemService(Context.USB_SERVICE);
             List<UsbSerialDriver> availableDrivers = UsbSerialProber.getDefaultProber().findAllDrivers(manager);
             if (availableDrivers.isEmpty())
                 return responseCode;
 
+            Log.d(TAG, "Tag 3");
             // Open a connection to the first available driver.
             UsbSerialDriver driver = availableDrivers.get(0);
             UsbDeviceConnection connection = manager.openDevice(driver.getDevice());
             if (connection == null)
                 return responseCode;
+
+            Log.d(TAG, "Tag 4");
 
             // Open connection
             UsbSerialPort port = driver.getPorts().get(0);
@@ -280,8 +294,10 @@ public class MainActivity extends Activity {
                 Log.d(TAG, "Message:" + message);
 
                 // Extract response
-                if(message.contains("No flow"))
+                if(message.contains("No flow")) {
+                    servingBeer = false;
                     return responseCode = -1;
+                }
 
                 int responseBegin = message.indexOf("d");
                 String response = message.substring(responseBegin,responseBegin+4);
@@ -323,6 +339,7 @@ public class MainActivity extends Activity {
     }
 
     private void beerOrderUpdatedResult(){
+
         if (this.beerServerServiceRef != null) {
 
             String result = "Result: "+String.valueOf(beerServerServiceRef.GetBeerSetOrderResult())
@@ -330,7 +347,9 @@ public class MainActivity extends Activity {
 
             Log.d(TAG, "beerOrderUpdatedResult: " + result);
             Toast toast = Toast.makeText(getApplicationContext(),result, Toast.LENGTH_SHORT);
-            toast.show();
+            //toast.show();
+
+            servingBeer = false;
         }
     }
 
